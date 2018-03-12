@@ -54,36 +54,60 @@ def layers(vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_classes):
     :param num_classes: Number of classes to classify
     :return: The Tensor for the last layer of output
     """
+    weights_l2 = 1e-3
     # TODO: Implement function
     # implement FCN8 Decode part
     # got 1x1 convolution to preserve spatial information
-    conv_1x1 = tf.layers.conv2d(vgg_layer7_out, num_classes, 1, (1, 1), padding='same',
-                                kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3))
-    # upsample
-    output = tf.layers.conv2d_transpose(conv_1x1, 512, 4, 2, padding='same',
-                                        kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3))
+    conv_1x1 = tf.layers.conv2d(vgg_layer7_out,
+                                num_classes,
+                                1, (1, 1),      # kernel and stride size
+                                padding='same',
+                                kernel_regularizer=tf.contrib.layers.l2_regularizer(weights_l2),
+                                name='conv_1x1')
+    # Upsample deconvolutions x 2
+    first_upsample_x2 = tf.layers.conv2d_transpose(conv_1x1,
+                                        512,
+                                        4, 2,
+                                        padding='same',
+                                        kernel_regularizer=tf.contrib.layers.l2_regularizer(weights_l2),
+                                        name='first_upsample_x2')
     #output = tf.layers.conv2d_transpose(output, num_classes, 4, 2, padding='same',
     #                                    kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3))
     #output = tf.layers.conv2d_transpose(output, num_classes, 4, 2, padding='same',
     #                                    kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3))
 
-    # add skip connection for pool4 (make sure the shape are the same!)
-    print("name: {0}, shape: {1}".format(output.name, output.get_shape()))
-    print("name: {0}, shape: {1}".format(vgg_layer4_out.name, vgg_layer4_out.get_shape()))
-    output = tf.add(output, vgg_layer4_out)
+    print("name: {0}, shape: {1}".format(first_upsample_x2.name,
+                                         first_upsample_x2.get_shape()))
+    print("name: {0}, shape: {1}".format(vgg_layer4_out.name,
+                                         vgg_layer4_out.get_shape()))
+    # Add skip connection for pool4 (make sure the shape are the same!)
+    first_skip = tf.add(first_upsample_x2, vgg_layer4_out, name='first_skip')
 
-    # upsample
-    output = tf.layers.conv2d_transpose(output, 256, 4, 2, padding='same',
-                                        kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3))
+    # Upsample deconvolution x 2
+    second_upsample_x2 = tf.layers.conv2d_transpose(first_skip,
+                                                    256,
+                                                    4, 2,
+                                                    padding='same',
+                                                    kernel_regularizer=tf.contrib.layers.l2_regularizer(weights_l2),
+                                                    name='second_upsample_x2')
 
-    # add skip connection for pool3
-    print("name: {0}, shape: {1}".format(output.name, output.get_shape()))
-    print("name: {0}, shape: {1}".format(vgg_layer3_out.name, vgg_layer3_out.get_shape()))
-    output = tf.add(output, vgg_layer3_out)
-    output = tf.layers.conv2d_transpose(output, num_classes, 16, 8)
+    print("name: {0}, shape: {1}".format(second_upsample_x2.name,
+                                         second_upsample_x2.get_shape()))
+    print("name: {0}, shape: {1}".format(vgg_layer3_out.name,
+                                         vgg_layer3_out.get_shape()))
+    # Add skip connection for pool3
+    second_skip = tf.add(second_upsample_x2, vgg_layer3_out, name='second_skip')
 
-    tf.Print(output, [tf.shape(output)])
-    return output
+    # Upsample deconvolution x 8
+    third_upsample_x8 = tf.layers.conv2d_transpose(second_skip,
+                                                   num_classes,
+                                                   16, 8,
+                                                   padding='same',
+                                                   kernel_regularizer=tf.contrib.layers.l2_regularizer(weights_l2),
+                                                   name='third_upsample_x8')
+
+    tf.Print(third_upsample_x8, [tf.shape(third_upsample_x8)])
+    return third_upsample_x8
 tests.test_layers(layers)
 
 
@@ -98,13 +122,19 @@ def optimize(nn_last_layer, correct_label, learning_rate, num_classes):
     """
     # TODO: Implement function
     # may need to reshape
+    # reshape logits : 2D tensor where each row represent a pixel and each column a class.
     logits = tf.reshape(nn_last_layer, (-1, num_classes))
-    cross_entropy = tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=correct_label)
-    loss_operation = tf.reduce_mean(cross_entropy)
+    correct_label = tf.reshape(correct_label, (-1, num_classes))
+    # build loss function.
+    cross_entropy = tf.nn.softmax_cross_entropy_with_logits(logits=logits,
+                                                        labels=correct_label)
+    cross_entropy_loss = tf.reduce_mean(cross_entropy)
+    # Define optimizer. Using Adam to have variable -- learning rate.
     optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate)
-    training_operation = optimizer.minimize(loss_operation)
+    # Apply optimizer to the loss function.
+    training_op = optimizer.minimize(cross_entropy_loss)
 
-    return logits, training_operation, loss_operation
+    return logits, training_op, cross_entropy_loss
 tests.test_optimize(optimize)
 
 
@@ -124,11 +154,21 @@ def train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cross_entropy_l
     :param learning_rate: TF Placeholder for learning rate
     """
     # TODO: Implement function
-    rate = 10
+    # Initialize tensor variable
+    sess.run(tf.global_variables_initializer())
+
+    print('Starting training... for {} epochs\n'.format(epochs))
+    rate = 0.001
+    prob = 0.8
     for ep in range(epochs):
-        for img_tensor, label in get_batches_fn(batch_size):
+        print('Epoch : {}'.format(ep + 1))
+        for img, label in get_batches_fn(batch_size):
             # training
-            sess.run(train_op, feed_dict={input_image:img_tensor, correct_label:label, learning_rate:rate})
+            sess.run(train_op, feed_dict={input_image: img,
+                                          correct_label: label,
+                                          keep_prob: prob,
+                                          learning_rate: rate})
+    print("Finish training!")
 
 tests.test_train_nn(train_nn)
 
@@ -157,19 +197,20 @@ def run():
         #  https://datascience.stackexchange.com/questions/5224/how-to-prepare-augment-images-for-neural-network
 
         # TODO: Build NN using load_vgg, layers, and optimize function
-        input_tensor, keep_tensor, c3_tensor, c4_tensor, c7_tensor = load_vgg(sess, vgg_path)
+        input_image, keep_prob, c3_tensor, c4_tensor, c7_tensor = load_vgg(sess, vgg_path)
         layer_output = layers(c3_tensor, c4_tensor, c7_tensor, num_classes)
         correct_label = tf.placeholder(tf.float32, [None, None, None, num_classes])
         learning_rate = tf.placeholder(tf.float32)
-        logits, training_operation, loss_operation = optimize(layer_output, correct_label, learning_rate, num_classes)
+        logits, training_operation, cross_entropy_loss = optimize(layer_output, correct_label, learning_rate, num_classes)
 
         # TODO: Train NN using the train_nn function
-        epochs = 2
-        batch_size = 100
-        input_image = tf.placeholder(tf.float32, name='input_image')
-        keep_prob = tf.placeholder(tf.float32, name='keep_prob')
-        train_nn(sess, epochs, batch_size, get_batches_fn, training_operation, loss_operation, input_image,
-                 correct_label, keep_prob, learning_rate)
+        epochs = 1
+        batch_size = 25
+        #input_image = tf.placeholder(tf.float32, name='input_image')
+        #keep_prob = tf.placeholder(tf.float32, name='keep_prob')
+        train_nn(sess, epochs, batch_size, get_batches_fn, training_operation,
+                 cross_entropy_loss, input_image, correct_label, keep_prob,
+                 learning_rate)
 
         # TODO: Save inference data using helper.save_inference_samples
         #  helper.save_inference_samples(runs_dir, data_dir, sess, image_shape, logits, keep_prob, input_image)
