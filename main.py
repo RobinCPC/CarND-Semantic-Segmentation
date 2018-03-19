@@ -1,4 +1,6 @@
 import os.path
+import time
+import csv
 import tensorflow as tf
 import helper
 import warnings
@@ -157,18 +159,38 @@ def train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cross_entropy_l
     # Initialize tensor variable
     sess.run(tf.global_variables_initializer())
 
-    print('Starting training... for {} epochs\n'.format(epochs))
+    # initialize local variables to record result
+    epo_list = []
     rate = 0.001
     prob = 0.8
+    out_file = 'EP'+ str(epochs) + '_B' + str(batch_size) + '_Rt' + \
+                str(rate) + '_Pr' + str(prob) + '.csv'
+    csvfile = open('./data/'+out_file, 'w')
+    writeCSV = csv.writer(csvfile, delimiter=',')
+
+    print('Starting training... for {} epochs\n'.format(epochs))
+    print('Batch size = {}, Learning rate = {:.5f}, Dropout = {}'.format(
+        batch_size, rate, prob))
     for ep in range(epochs):
         print('Epoch : {}'.format(ep + 1))
+        loss_list = []
+        t0 = time.time()
         for img, label in get_batches_fn(batch_size):
             # training
-            sess.run(train_op, feed_dict={input_image: img,
-                                          correct_label: label,
-                                          keep_prob: prob,
-                                          learning_rate: rate})
+            _, loss = sess.run([train_op, cross_entropy_loss],
+                                feed_dict={
+                                    input_image: img,
+                                    correct_label: label,
+                                    keep_prob: prob,
+                                    learning_rate: rate})
+            loss_list.append(loss)
+        epo_list.append(ep+1)
+        dt = (time.time() - t0)
+        print('EPOCH {}..., Time: {:.3f} seconds.'.format(ep+1, dt))
+        print(loss_list)
+        writeCSV.writerow(loss_list)
     print("Finish training!")
+    csvfile.close()
 
 tests.test_train_nn(train_nn)
 
