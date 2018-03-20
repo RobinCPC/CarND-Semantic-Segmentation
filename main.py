@@ -73,15 +73,7 @@ def layers(vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_classes):
                                         padding='same',
                                         kernel_regularizer=tf.contrib.layers.l2_regularizer(weights_l2),
                                         name='first_upsample_x2')
-    #output = tf.layers.conv2d_transpose(output, num_classes, 4, 2, padding='same',
-    #                                    kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3))
-    #output = tf.layers.conv2d_transpose(output, num_classes, 4, 2, padding='same',
-    #                                    kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3))
 
-    #print("name: {0}, shape: {1}".format(first_upsample_x2.name,
-    #                                     first_upsample_x2.get_shape()))
-    #print("name: {0}, shape: {1}".format(vgg_layer4_out.name,
-    #                                     vgg_layer4_out.get_shape()))
     # Add skip connection for pool4 (make sure the shape are the same!)
     first_skip = tf.add(first_upsample_x2, vgg_layer4_out, name='first_skip')
 
@@ -93,10 +85,6 @@ def layers(vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_classes):
                                                     kernel_regularizer=tf.contrib.layers.l2_regularizer(weights_l2),
                                                     name='second_upsample_x2')
 
-    #print("name: {0}, shape: {1}".format(second_upsample_x2.name,
-    #                                     second_upsample_x2.get_shape()))
-    #print("name: {0}, shape: {1}".format(vgg_layer3_out.name,
-    #                                     vgg_layer3_out.get_shape()))
     # Add skip connection for pool3
     second_skip = tf.add(second_upsample_x2, vgg_layer3_out, name='second_skip')
 
