@@ -78,10 +78,10 @@ def layers(vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_classes):
     #output = tf.layers.conv2d_transpose(output, num_classes, 4, 2, padding='same',
     #                                    kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3))
 
-    print("name: {0}, shape: {1}".format(first_upsample_x2.name,
-                                         first_upsample_x2.get_shape()))
-    print("name: {0}, shape: {1}".format(vgg_layer4_out.name,
-                                         vgg_layer4_out.get_shape()))
+    #print("name: {0}, shape: {1}".format(first_upsample_x2.name,
+    #                                     first_upsample_x2.get_shape()))
+    #print("name: {0}, shape: {1}".format(vgg_layer4_out.name,
+    #                                     vgg_layer4_out.get_shape()))
     # Add skip connection for pool4 (make sure the shape are the same!)
     first_skip = tf.add(first_upsample_x2, vgg_layer4_out, name='first_skip')
 
@@ -93,10 +93,10 @@ def layers(vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_classes):
                                                     kernel_regularizer=tf.contrib.layers.l2_regularizer(weights_l2),
                                                     name='second_upsample_x2')
 
-    print("name: {0}, shape: {1}".format(second_upsample_x2.name,
-                                         second_upsample_x2.get_shape()))
-    print("name: {0}, shape: {1}".format(vgg_layer3_out.name,
-                                         vgg_layer3_out.get_shape()))
+    #print("name: {0}, shape: {1}".format(second_upsample_x2.name,
+    #                                     second_upsample_x2.get_shape()))
+    #print("name: {0}, shape: {1}".format(vgg_layer3_out.name,
+    #                                     vgg_layer3_out.get_shape()))
     # Add skip connection for pool3
     second_skip = tf.add(second_upsample_x2, vgg_layer3_out, name='second_skip')
 
@@ -161,8 +161,8 @@ def train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cross_entropy_l
 
     # initialize local variables to record result
     epo_list = []
-    rate = 0.001
-    prob = 0.8
+    rate = 0.0001
+    prob = 0.6
     out_file = 'EP'+ str(epochs) + '_B' + str(batch_size) + '_Rt' + \
                 str(rate) + '_Pr' + str(prob) + '.csv'
     csvfile = open('./data/'+out_file, 'w')
@@ -226,7 +226,7 @@ def run():
         logits, training_operation, cross_entropy_loss = optimize(layer_output, correct_label, learning_rate, num_classes)
 
         # TODO: Train NN using the train_nn function
-        epochs = 1
+        epochs = 48
         batch_size = 25
         #input_image = tf.placeholder(tf.float32, name='input_image')
         #keep_prob = tf.placeholder(tf.float32, name='keep_prob')
